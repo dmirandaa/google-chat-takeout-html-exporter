@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Chat Exporter - Demo</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #f5f5f5;
+            --bg-secondary: white;
+            --text-primary: #000;
+            --text-secondary: #666;
+            --border-color: #e0e0e0;
+            --message-owner-bg: #d3e3fd;
+            --message-receiver-bg: #f2f2f2;
+            --accent-color: #1976d2;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--bg-primary);
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        /* Demo Controls */
+        .demo-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .demo-header h1 {
+            margin-bottom: 10px;
+        }
+
+        .theme-toggle-demo {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 10px 15px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border: 1px solid white;
+            border-radius: 6px;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .theme-toggle-demo:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+
+        /* Chat Header */
+        .chat-header {
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .back-button {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: var(--bg-primary);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+        }
+
+        .back-button:hover {
+            background-color: var(--border-color);
+        }
+
+        .avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 18px;
+        }
+
+        .avatar img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+        }
+
+        .header-info {
+            flex: 1;
+        }
+
+        .header-info h2 {
+            font-size: 18px;
+            margin-bottom: 4px;
+        }
+
+        .header-info p {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .theme-toggle {
+            padding: 8px 12px;
+            background-color: var(--bg-primary);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 18px;
+        }
+
+        /* Demo Info Box */
+        .demo-info {
+            background-color: #e3f2fd;
+            border-left: 4px solid var(--accent-color);
+            padding: 16px;
+            margin: 16px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #1565c0;
+        }
+
+        .demo-info strong {
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        /* Chat Container */
+        .chat-container {
+            background-color: var(--bg-primary);
+            min-height: 500px;
+            padding: 16px;
+        }
+
+        .date-separator {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 20px 0;
+            opacity: 0.6;
+        }
+
+        .date-separator::before,
+        .date-separator::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background-color: var(--border-color);
+        }
+
+        .date-separator-text {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            background-color: var(--bg-primary);
+            padding: 0 8px;
+        }
+
+        /* Messages */
+        .message {
+            display: flex;
+            margin-bottom: 12px;
+        }
+
+        .message.owner {
+            justify-content: flex-end;
+        }
+
+        .message-content {
+            max-width: 60%;
+            padding: 12px;
+            border-radius: 8px;
+            word-wrap: break-word;
+        }
+
+        .message.receiver .message-content {
+            background-color: var(--message-receiver-bg);
+        }
+
+        .message.owner .message-content {
+            background-color: var(--message-owner-bg);
+        }
+
+        .message-text {
+            line-height: 1.4;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .message-time {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .attached-media {
+            margin-top: 8px;
+            border-radius: 8px;
+            overflow: hidden;
+            max-width: 100%;
+        }
+
+        .attached-image {
+            max-width: 100%;
+            max-height: 250px;
+            border-radius: 8px;
+            display: block;
+            background-color: rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+
+        .attached-file {
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+        }
+
+        .file-download {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background-color: rgba(0, 0, 0, 0.05);
+            border-radius: 6px;
+            text-decoration: none;
+            color: var(--accent-color);
+            font-weight: 500;
+            font-size: 13px;
+        }
+
+        .file-download:hover {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .file-ext {
+            color: var(--text-secondary);
+            font-size: 11px;
+        }
+
+        /* Pagination */
+        .pagination-nav {
+            padding: 16px;
+            border: 1px solid var(--border-color);
+            background-color: var(--bg-secondary);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin: 16px;
+            border-radius: 8px;
+        }
+
+        .pagination-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .page-indicator {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .pagination-buttons {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .pagination-btn {
+            padding: 8px 12px;
+            background-color: var(--accent-color);
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            flex: 1;
+        }
+
+        .pagination-btn:hover {
+            opacity: 0.9;
+        }
+
+        .page-selector {
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        /* Feature Callouts */
+        .feature-callout {
+            position: relative;
+            padding: 12px;
+            border-left: 3px solid var(--accent-color);
+            background-color: rgba(25, 118, 210, 0.05);
+            margin: 12px 0;
+            font-size: 12px;
+            border-radius: 4px;
+        }
+
+        .feature-callout strong {
+            color: var(--accent-color);
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        /* Footer */
+        .footer {
+            padding: 16px;
+            border-top: 1px solid var(--border-color);
+            background-color: var(--bg-secondary);
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 16px;
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .message-content {
+                max-width: 85%;
+            }
+
+            .chat-header {
+                padding: 12px;
+            }
+
+            .pagination-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="demo-header">
+        <h1>📱 Google Chat Exporter Demo</h1>
+        <p>Interactive demonstration of exported conversation features</p>
+        <button class="theme-toggle-demo" onclick="toggleTheme()">🌙 Toggle Theme</button>
+    </div>
+
+    <div class="container">
+        <div class="demo-info">
+            <strong>✨ What You're Seeing:</strong>
+            This is a sample of what your exported Google Chat conversations look like. Features include:
+            dark mode support, pagination, responsive design, timezone-formatted timestamps, and attachment links
+            referencing original source files.
+        </div>
+
+        <div class="chat-container">
+            <!-- Chat Header -->
+            <div class="chat-header">
+                <button class="back-button" title="Back to conversations">
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        style="width: 20px; height: 20px; stroke: currentColor;">
+                        <path d="M15 18l-6-6 6-6"></path>
+                    </svg>
+                </button>
+                <div class="avatar">👤</div>
+                <div class="header-info">
+                    <h2>Jane Doe</h2>
+                    <p>jane@example.com</p>
+                </div>
+                <button class="theme-toggle" id="themeToggle" title="Toggle dark mode">🌙</button>
+            </div>
+
+            <!-- Messages -->
+            <div class="date-separator">
+                <div class="date-separator-text">Monday, July 15, 2024</div>
+            </div>
+
+            <!-- Message 1: Received -->
+            <div class="message receiver">
+                <div class="message-content">
+                    <div class="message-text">Hey, how are you doing?</div>
+                    <div class="message-time">10:30 AM</div>
+                </div>
+            </div>
+
+            <div class="feature-callout">
+                <strong>💬 Message Bubbles</strong>
+                Messages are color-coded: your messages appear on the right (blue), others on the left (gray)
+            </div>
+
+            <!-- Message 2: Sent -->
+            <div class="message owner">
+                <div class="message-content">
+                    <div class="message-text">Great! Just finished that project we discussed.</div>
+                    <div class="message-time">10:35 AM</div>
+                </div>
+            </div>
+
+            <!-- Message 3: With attachment -->
+            <div class="message receiver">
+                <div class="message-content">
+                    <div class="message-text">Awesome! Can you share the files?</div>
+                    <div class="message-time">10:40 AM</div>
+                </div>
+            </div>
+
+            <!-- Message 4: With attachment -->
+            <div class="message owner">
+                <div class="message-content">
+                    <div class="message-text">Sure, here are the latest designs:</div>
+                    <div class="attached-file">
+                        <a href="#" class="file-download">📎 project-designs.zip <span class="file-ext">.zip</span></a>
+                    </div>
+                    <div class="message-time">10:42 AM</div>
+                </div>
+            </div>
+
+            <div class="feature-callout">
+                <strong>📎 File References</strong>
+                Attachments reference files from the original Google Chat Groups folder using relative paths.
+                This avoids duplication and saves ~98% of storage space!
+            </div>
+
+            <!-- Message 5: With image -->
+            <div class="message receiver">
+                <div class="message-content">
+                    <div class="message-text">The designs look fantastic!</div>
+                    <div class="attached-media">
+                        <div
+                            style="width: 300px; height: 200px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px;">
+                            [Screenshot Image]</div>
+                    </div>
+                    <div class="message-time">10:45 AM</div>
+                </div>
+            </div>
+
+            <div class="feature-callout">
+                <strong>🖼️ Media Support</strong>
+                Images and videos display inline. Audio files are playable. All media types are supported.
+            </div>
+
+            <!-- Message 6: With URL -->
+            <div class="message owner">
+                <div class="message-text">Thanks! Here's the progress update:</div>
+                <div
+                    style="margin-top: 8px; padding: 12px; background-color: rgba(0,0,0,0.05); border-radius: 8px; text-decoration: none; display: block; color: var(--text-primary);">
+                    <div style="font-weight: 500; font-size: 14px; margin-bottom: 4px;">Project Status Dashboard</div>
+                    <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.3; margin-bottom: 8px;">
+                        Track real-time progress on all deliverables with automated updates...</div>
+                    <div style="font-size: 12px; color: var(--accent-color);">example.com/dashboard</div>
+                </div>
+                <div class="message-time">10:48 AM</div>
+            </div>
+
+            <div class="feature-callout">
+                <strong>🔗 Rich URL Previews</strong>
+                Shared links display with title, description, and domain. Metadata is extracted from the original
+                export.
+            </div>
+
+            <div class="date-separator">
+                <div class="date-separator-text">Tuesday, July 16, 2024</div>
+            </div>
+
+            <div class="message receiver">
+                <div class="message-content">
+                    <div class="message-text">Perfect! When can we meet?</div>
+                    <div class="message-time">2:15 PM</div>
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            <div class="pagination-nav">
+                <div class="pagination-info">
+                    <span class="page-indicator">Page 2 of 5</span>
+                    <span class="message-count">150 messages total</span>
+                </div>
+                <div class="pagination-buttons">
+                    <a href="#" class="pagination-btn">← Previous</a>
+                    <span style="text-align: center; color: var(--text-secondary); font-size: 13px;">
+                        Page <strong>2</strong> | <a href="#"
+                            style="color: var(--accent-color); text-decoration: none;">Last</a>
+                    </span>
+                    <a href="#" class="pagination-btn">Next →</a>
+                </div>
+            </div>
+
+            <div class="feature-callout">
+                <strong>📄 Pagination</strong>
+                Large conversations are split into pages (configurable via MESSAGES_PER_PAGE).
+                Each conversation gets its own folder: <code>output/{conversationId}/index.html</code> and
+                <code>page2.html</code>, etc.
+            </div>
+
+            <!-- Features Summary -->
+            <div
+                style="background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-top: 24px;">
+                <h3 style="margin-bottom: 12px;">✨ Key Features</h3>
+                <ul style="list-style: none; font-size: 13px; line-height: 1.8;">
+                    <li>✅ <strong>Folder-per-conversation structure</strong> - Each conversation isolated in its own
+                        directory</li>
+                    <li>✅ <strong>Source-referenced attachments</strong> - No file copying; references point to original
+                        Google Chat/Groups data</li>
+                    <li>✅ <strong>Dark mode</strong> - Theme persists across page navigation via URL parameters</li>
+                    <li>✅ <strong>Responsive design</strong> - Works on desktop, tablet, and mobile</li>
+                    <li>✅ <strong>Timezone support</strong> - Timestamps formatted per your configured timezone</li>
+                    <li>✅ <strong>i18n support</strong> - Locale-based UI translations (en, pt-BR, extensible)</li>
+                    <li>✅ <strong>Material Design 3</strong> - Modern, professional UI with smooth transitions</li>
+                    <li>✅ <strong>Gravatar avatars</strong> - Real user photos with fallback to colored initials</li>
+                    <li>✅ <strong>URL previews</strong> - Rich metadata cards for shared links</li>
+                </ul>
+            </div>
+
+            <!-- Output Structure -->
+            <div
+                style="background-color: #f3e5f5; border-left: 4px solid #7b1fa2; padding: 16px; margin-top: 24px; border-radius: 4px; font-size: 12px;">
+                <strong style="display: block; margin-bottom: 12px; color: #4a148c;">📁 Output Structure</strong>
+                <code
+                    style="display: block; white-space: pre; background-color: rgba(0,0,0,0.05); padding: 12px; border-radius: 4px; overflow-x: auto;">
+output/
+├── index.html                    ← Master page listing all conversations
+├── DM 5tR6XgAAAAE/
+│   ├── index.html               ← Conversation page 1
+│   └── page2.html               ← Page 2 (if paginated)
+├── Space AAAAFl-t5LU/
+│   └── index.html               ← Group chat page
+└── [48 more conversation folders...]
+
+✨ All files reference attachments from:
+   Google Chat/Groups/{conversationId}/File-...
+                </code>
+            </div>
+
+        </div>
+
+        <div class="footer">
+            <strong>Built with GitHub Copilot AI</strong> |
+            <a href="#" style="color: var(--accent-color); text-decoration: none;">View Source Code</a> |
+            <a href="#" style="color: var(--accent-color); text-decoration: none;">Documentation</a>
+        </div>
+    </div>
+
+    <script>
+        const themeToggle = document.getElementById('themeToggle');
+        const demoToggle = document.querySelector('.theme-toggle-demo');
+        const html = document.documentElement;
+
+        // Initialize theme from localStorage
+        const currentTheme = localStorage.getItem('theme') || 'light';
+        html.setAttribute('data-theme', currentTheme);
+        updateThemeIcon(currentTheme);
+
+        themeToggle.addEventListener('click', () => toggleTheme());
+        demoToggle.addEventListener('click', () => toggleTheme());
+
+        function toggleTheme() {
+            const currentTheme = html.getAttribute('data-theme') || 'light';
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        }
+
+        function updateThemeIcon(theme) {
+            const icon = theme === 'light' ? '🌙' : '☀️';
+            themeToggle.textContent = icon;
+            demoToggle.textContent = (theme === 'light' ? '🌙' : '☀️') + ' Toggle Theme';
+        }
+
+        // Dark mode styles
+        const style = document.createElement('style');
+        style.textContent = `
+            :root[data-theme="dark"] {
+                --bg-primary: #1a1a1a;
+                --bg-secondary: #2a2a2a;
+                --text-primary: #e0e0e0;
+                --text-secondary: #b0b0b0;
+                --border-color: #444;
+                --message-owner-bg: #1e3a5f;
+                --message-receiver-bg: #3a3a3a;
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+
+</html>

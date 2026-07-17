@@ -15,6 +15,10 @@ Convert Google Chat JSON exports into beautiful, interactive Material Design 3 H
 🖼️ **Inline Media Support** - Display images, videos, and download links  
 ⚡ **Fast Generation** - Process thousands of messages in seconds  
 
+## 👀 See It In Action
+
+Want to see what the exporter output looks like? Open [DEMO.html](DEMO.html) in your browser for an interactive preview with sample messages, attachments, pagination, and dark mode.
+
 ## Quick Start
 
 ### Prerequisites
@@ -28,7 +32,7 @@ Convert Google Chat JSON exports into beautiful, interactive Material Design 3 H
 1. **Clone or download** this project
 
    ```bash
-   cd Google-Chat-Takeout-Viewer
+   cd google-chat-takeout-html-exporter
    ```
 
 2. **Install dependencies**
