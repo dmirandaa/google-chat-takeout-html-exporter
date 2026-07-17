@@ -17,7 +17,7 @@ Convert Google Chat JSON exports into beautiful, interactive Material Design 3 H
 
 ## 👀 See It In Action
 
-Want to see what the exporter output looks like? Open [DEMO.html](DEMO.html) in your browser for an interactive preview with sample messages, attachments, pagination, and dark mode.
+Want to see what the exporter output looks like? Open [DEMO.html](docs/DEMO.html) in your browser for an interactive preview with sample messages, attachments, pagination, and dark mode.
 
 ## Quick Start
 
