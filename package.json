@@ -1,0 +1,24 @@
+{
+  "name": "google-chat-takeout-html-exporter",
+  "version": "1.0.0",
+  "description": "Convert Google Chat JSON exports to Material Design 3 HTML chat interface",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "keywords": [
+    "google-chat",
+    "html-export",
+    "material-design",
+    "google-takeout"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "moment-timezone": "^0.5.45"
+  },
+  "devDependencies": {}
+}
