@@ -1,0 +1,65 @@
+name: Release ZIP
+
+'on':
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release-zip:
+    name: Build and publish versioned ZIP
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read package version
+        id: package
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+           echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Create version metadata
+        id: release
+        shell: bash
+        run: |
+          version="${{ steps.package.outputs.version }}.${{ github.run_number }}"
+          archive_name="google-chat-takeout-html-exporter-v${version}.zip"
+          archive_path="$RUNNER_TEMP/$archive_name"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "archive_name=$archive_name" >> "$GITHUB_OUTPUT"
+          echo "archive_path=$archive_path" >> "$GITHUB_OUTPUT"
+
+      - name: Create ZIP archive
+        shell: bash
+        run: |
+          zip -r "${{ steps.release.outputs.archive_path }}" . \
+            -x ".git" \
+            -x ".git/*" \
+            -x ".github" \
+            -x ".github/*" \
+            -x ".gitignore"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: google-chat-takeout-html-exporter-v${{ steps.release.outputs.version }}
+          path: ${{ steps.release.outputs.archive_path }}
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: Release ${{ steps.release.outputs.tag }}
+          body: |
+            Automated ZIP release for commit ${{ github.sha }}.
+
+            Version: ${{ steps.release.outputs.version }}
+          files: ${{ steps.release.outputs.archive_path }}
