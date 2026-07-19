@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Search Messages - Google Chat Exporter Demo</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #f5f5f5;
+      --bg-secondary: white;
+      --bg-tertiary: #f9f9f9;
+      --text-primary: #000;
+      --text-secondary: #666;
+      --text-tertiary: #999;
+      --border-color: #e0e0e0;
+      --accent-color: #1976d2;
+      --shadow: rgba(0, 0, 0, 0.1);
+    }
+
+    :root[data-theme="dark"] {
+      --bg-primary: #1a1a1a;
+      --bg-secondary: #2a2a2a;
+      --bg-tertiary: #333;
+      --text-primary: #e0e0e0;
+      --text-secondary: #b0b0b0;
+      --text-tertiary: #808080;
+      --border-color: #444;
+      --accent-color: #64b5f6;
+      --shadow: rgba(0, 0, 0, 0.3);
+    }
+
+    body {
+      font-family: 'Roboto', sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    .search-page {
+      max-width: 900px;
+      min-height: 100vh;
+      margin: 0 auto;
+      background-color: var(--bg-secondary);
+      box-shadow: 0 -2px 4px var(--shadow);
+    }
+
+    .search-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .back-button {
+      width: 36px;
+      height: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background-color: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--accent-color);
+      text-decoration: none;
+      font-size: 24px;
+    }
+
+    .search-title {
+      flex: 1;
+      min-width: 220px;
+    }
+
+    .search-title h1 {
+      font-size: 18px;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .search-title p {
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .conversation-search {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-basis: 100%;
+    }
+
+    .conversation-search-input {
+      flex: 1;
+      min-width: 0;
+      padding: 10px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background-color: var(--bg-tertiary);
+      color: var(--text-primary);
+      font-size: 14px;
+    }
+
+    .search-submit,
+    .theme-toggle {
+      padding: 10px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background-color: var(--accent-color);
+      color: white;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .theme-toggle {
+      background-color: var(--bg-tertiary);
+      color: var(--text-primary);
+      font-size: 18px;
+    }
+
+    .search-summary {
+      padding: 16px;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .search-results-list {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .search-result {
+      display: block;
+      padding: 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background-color: var(--bg-tertiary);
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+
+    .search-result:hover {
+      border-color: var(--accent-color);
+    }
+
+    .search-result-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 5px;
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .search-result-snippet {
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    @media (max-width: 600px) {
+      .search-header {
+        padding: 12px;
+      }
+
+      .search-result-meta {
+        flex-direction: column;
+        gap: 2px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="search-page">
+    <div class="search-header">
+      <a href="index.html" class="back-button" title="Back to conversation" aria-label="Back to conversation">‹</a>
+      <div class="search-title">
+        <h1>Search messages</h1>
+        <p>Jane Doe</p>
+      </div>
+      <button class="theme-toggle" id="themeToggle" title="Toggle dark mode">🌙</button>
+      <form class="conversation-search" id="conversationSearchForm" action="search.html" method="get" role="search">
+        <input id="conversationSearchInput" class="conversation-search-input" type="search" name="q" autocomplete="off"
+          placeholder="Search messages" aria-label="Search messages" autofocus>
+        <input type="hidden" name="theme" value="">
+        <button class="search-submit" type="submit">Search</button>
+      </form>
+    </div>
+    <div class="search-summary" id="searchSummary"></div>
+    <div class="search-results-list" id="searchResultsList"></div>
+  </div>
+
+  <script type="application/json" id="conversation-search-index">
+        [
+            {
+                "id": "message-demo-designs",
+                "page": 1,
+                "file": "index.html",
+                "sender": "Daniel",
+                "time": "10:42 AM",
+                "snippet": "Sure, here are the latest designs: project-designs.zip",
+                "text": "sure here are the latest designs project-designs.zip daniel file attachment zip"
+            },
+            {
+                "id": "message-demo-dashboard",
+                "page": 1,
+                "file": "index.html",
+                "sender": "Daniel",
+                "time": "10:48 AM",
+                "snippet": "Thanks! Here's the progress update: Project Status Dashboard",
+                "text": "thanks progress update project status dashboard example.com dashboard url preview metadata"
+            },
+            {
+                "id": "message-demo-meet",
+                "page": 1,
+                "file": "index.html",
+                "sender": "Jane Doe",
+                "time": "2:15 PM",
+                "snippet": "Perfect! When can we meet?",
+                "text": "perfect when can we meet jane doe"
+            },
+            {
+                "id": "message-demo-media",
+                "page": 1,
+                "file": "index.html",
+                "sender": "Jane Doe",
+                "time": "10:45 AM",
+                "snippet": "The designs look fantastic! [Screenshot Image]",
+                "text": "designs look fantastic screenshot image media jane doe"
+            }
+        ]
+    </script>
+  <script>
+    const pageThemeParams = new URLSearchParams(window.location.search);
+    const currentTheme = pageThemeParams.get('theme') || localStorage.getItem('theme') || 'light';
+    const searchInput = document.getElementById('conversationSearchInput');
+    const searchForm = document.getElementById('conversationSearchForm');
+    const searchSummary = document.getElementById('searchSummary');
+    const searchResultsList = document.getElementById('searchResultsList');
+    const searchIndex = JSON.parse(document.getElementById('conversation-search-index').textContent || '[]');
+    const query = pageThemeParams.get('q') || '';
+
+    document.documentElement.setAttribute('data-theme', currentTheme);
+
+    function updateThemeButton(theme) {
+      const button = document.getElementById('themeToggle');
+      if (button) button.textContent = theme === 'light' ? '🌙' : '☀️';
+    }
+
+    function normalizeSearchText(value) {
+      return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    }
+
+    function resultUrl(record, currentQuery) {
+      const url = new URL(record.file || 'index.html', window.location.href);
+      url.searchParams.set('theme', currentTheme);
+      if (currentQuery) url.searchParams.set('q', currentQuery);
+      url.hash = record.id;
+      return url.toString();
+    }
+
+    function renderResults(currentQuery) {
+      searchResultsList.textContent = '';
+      const terms = normalizeSearchText(currentQuery).trim().split(/\s+/).filter(Boolean);
+
+      if (terms.length === 0) {
+        searchSummary.textContent = 'Enter a search term to find messages in this conversation.';
+        return;
+      }
+
+      const matches = searchIndex.filter(record => terms.every(term => (record.text || '').includes(term)));
+      searchSummary.textContent = matches.length + (matches.length === 1 ? ' result' : ' results');
+
+      if (matches.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'search-result';
+        empty.textContent = 'No results found';
+        searchResultsList.appendChild(empty);
+        return;
+      }
+
+      matches.forEach(record => {
+        const link = document.createElement('a');
+        link.className = 'search-result';
+        link.href = resultUrl(record, currentQuery);
+
+        const meta = document.createElement('div');
+        meta.className = 'search-result-meta';
+        const sender = document.createElement('span');
+        sender.textContent = record.sender || 'Unknown';
+        const page = document.createElement('span');
+        page.textContent = 'Page ' + record.page;
+        meta.append(sender, page);
+
+        const snippet = document.createElement('div');
+        snippet.className = 'search-result-snippet';
+        snippet.textContent = record.snippet || record.time || '';
+
+        link.append(meta, snippet);
+        searchResultsList.appendChild(link);
+      });
+    }
+
+    updateThemeButton(currentTheme);
+
+    const themeToggle = document.getElementById('themeToggle');
+    if (themeToggle) {
+      themeToggle.addEventListener('click', () => {
+        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+        const url = new URL(window.location.href);
+        url.searchParams.set('theme', newTheme);
+        window.location.href = url.toString();
+      });
+    }
+
+    if (searchInput) searchInput.value = query;
+    if (searchForm) {
+      searchForm.addEventListener('submit', event => {
+        if (!searchInput || !searchInput.value.trim()) event.preventDefault();
+        const themeInput = searchForm.querySelector('input[name="theme"]');
+        if (themeInput) themeInput.value = currentTheme;
+      });
+    }
+
+    renderResults(query);
+  </script>
+</body>
+
+</html>

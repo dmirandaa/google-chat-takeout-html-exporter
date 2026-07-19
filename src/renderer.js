@@ -1,7 +1,7 @@
 // Renderer module - generates Material Design 3 HTML
 import fs from 'fs';
 import path from 'path';
-import { formatDate, formatTime, parseGoogleChatDate } from './dateFormatter.js';
+import { formatDate, formatTime, formatDateTime, parseGoogleChatDate } from './dateFormatter.js';
 import { sanitizeHtml, extractAnnotationsMetadata, isImageUrl, extractDomain, isImageFile, isVideoFile, isAudioFile, getFileExtension } from './utils.js';
 import { getAvatar } from './avatarManager.js';
 import { getTranslator } from './i18n.js';
@@ -431,6 +431,7 @@ export async function renderConversationPage(conversation, timezone, locale, ena
             opacity: 0.7;
             margin-top: 4px;
             color: var(--text-tertiary);
+            cursor: default;
             transition: color 0.3s ease;
         }
 
@@ -1665,6 +1666,7 @@ function renderQuotedMessage(quotedMeta, locale) {
 function renderMessageBubble(message, ownerEmail, timezone, locale, ownerAvatar, isGroup = false, conversationId = null, messageIndex = 0) {
   const isOwner = message.creator.email === ownerEmail;
   const time = formatTime(message.created_date, timezone, locale);
+  const fullDateTime = formatDateTime(message.created_date, timezone, locale, 'dddd, LL LTS');
   const messageId = getMessageAnchorId(message, conversationId, messageIndex);
 
   // Render quoted/replied message if exists
@@ -1715,7 +1717,7 @@ function renderMessageBubble(message, ownerEmail, timezone, locale, ownerAvatar,
         <div class="message-text">${messageText}</div>
         ${annotationsHtml}
         ${attachedFilesHtml}
-        <div class="message-time">${time}</div>
+        <div class="message-time" title="${sanitizeHtml(fullDateTime)}">${time}</div>
     </div>
 </div>`;
 }
