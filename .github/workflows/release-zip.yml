@@ -22,7 +22,7 @@ jobs:
         shell: bash
         run: |
           version=$(node -p "require('./package.json').version")
-           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Create version metadata
         id: release

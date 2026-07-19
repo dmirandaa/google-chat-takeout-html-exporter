@@ -5,41 +5,60 @@ import { formatDate, formatTime, parseGoogleChatDate } from './dateFormatter.js'
 import { sanitizeHtml, extractAnnotationsMetadata, isImageUrl, extractDomain, isImageFile, isVideoFile, isAudioFile, getFileExtension } from './utils.js';
 import { getAvatar } from './avatarManager.js';
 import { getTranslator } from './i18n.js';
+import { getMessageAnchorId } from './searchIndex.js';
 
 const MATERIAL_DESIGN_CDN = 'https://unpkg.com/@material/web@latest';
 
-export async function renderConversationPage(conversation, timezone, locale) {
-    if (!conversation) return '';
+function serializeJsonForScript(value) {
+  return JSON.stringify(value || [])
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
 
-    const t = getTranslator(locale);
-    const receiver = conversation.receiver || { name: t('unknown'), email: 'unknown@example.com' };
-    const owner = conversation.owner || { name: t('owner'), email: 'owner@example.com' };
+function sanitizeJsString(value) {
+  return String(value || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/<\//g, '<\\/');
+}
 
-    // Get avatars
-    const receiverAvatar = await getAvatar(receiver);
-    const ownerAvatar = await getAvatar(owner);
+export async function renderConversationPage(conversation, timezone, locale, enableSearch = true) {
+  if (!conversation) return '';
 
-    // Render appropriate header based on conversation type
-    let headerHtml;
-    let pageTitle;
-    if (conversation.isGroup) {
-        headerHtml = renderGroupHeader(conversation.groupName, conversation.members, t);
-        pageTitle = conversation.groupName || t('groupChat');
-    } else {
-        headerHtml = renderHeader(receiver, receiverAvatar, t);
-        pageTitle = receiver.name;
-    }
+  const t = getTranslator(locale);
+  const receiver = conversation.receiver || { name: t('unknown'), email: 'unknown@example.com' };
+  const owner = conversation.owner || { name: t('owner'), email: 'owner@example.com' };
 
-    const messagesHtml = conversation.messages.length > 0
-        ? renderMessagesWithDateSeparators(conversation.messages, owner.email, timezone, locale, ownerAvatar, conversation.isGroup, conversation.members, conversation.id)
-        : `<div class="empty-conversation"><p>${sanitizeHtml(t('noMessagesInConversation'))}</p></div>`;
+  // Get avatars
+  const receiverAvatar = await getAvatar(receiver);
+  const ownerAvatar = await getAvatar(owner);
 
-    // Render pagination navigation if applicable
-    const paginationHtml = conversation.pageInfo
-        ? renderPaginationNav(conversation.id, conversation.pageInfo, locale)
-        : '';
+  // Render appropriate header based on conversation type
+  let headerHtml;
+  let pageTitle;
+  if (conversation.isGroup) {
+    headerHtml = renderGroupHeader(conversation.groupName, conversation.members, t, enableSearch);
+    pageTitle = conversation.groupName || t('groupChat');
+  } else {
+    headerHtml = renderHeader(receiver, receiverAvatar, t, enableSearch);
+    pageTitle = receiver.name;
+  }
 
-    return `<!DOCTYPE html>
+  const messagesHtml = conversation.messages.length > 0
+    ? renderMessagesWithDateSeparators(conversation.messages, owner.email, timezone, locale, ownerAvatar, conversation.isGroup, conversation.members, conversation.id, conversation.pageInfo?.startIndex || 0)
+    : `<div class="empty-conversation"><p>${sanitizeHtml(t('noMessagesInConversation'))}</p></div>`;
+
+  // Render pagination navigation if applicable
+  const paginationHtml = conversation.pageInfo
+    ? renderPaginationNav(conversation.id, conversation.pageInfo, locale)
+    : '';
+
+  return `<!DOCTYPE html>
 <html lang="${sanitizeHtml(locale || 'en')}">
 <head>
     <meta charset="UTF-8">
@@ -119,7 +138,7 @@ export async function renderConversationPage(conversation, timezone, locale) {
         }
 
         .theme-toggle {
-            margin-left: auto;
+            margin-left: 0;
             padding: 8px 12px;
             background-color: var(--bg-tertiary);
             border: 1px solid var(--border-color);
@@ -133,6 +152,56 @@ export async function renderConversationPage(conversation, timezone, locale) {
         .theme-toggle:hover {
             background-color: var(--accent-color);
             color: white;
+        }
+
+        .conversation-search {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+            min-width: 240px;
+            max-width: 360px;
+            flex: 1;
+        }
+
+        .conversation-search-input {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .conversation-search-input:focus {
+            outline: 2px solid var(--accent-color);
+            outline-offset: 1px;
+        }
+
+        .search-clear {
+            width: 34px;
+            height: 34px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background-color: var(--bg-tertiary);
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .search-clear:hover {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .search-status {
+            min-width: 84px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-align: right;
         }
 
         .avatar {
@@ -248,6 +317,61 @@ export async function renderConversationPage(conversation, timezone, locale) {
             gap: 8px;
             margin-bottom: 12px;
             animation: fadeIn 0.3s ease-in;
+            scroll-margin-top: 96px;
+        }
+
+        .message.search-active .message-content {
+            outline: 2px solid var(--accent-color);
+            box-shadow: 0 0 0 4px rgba(25, 118, 210, 0.12);
+        }
+
+        .search-results {
+            display: none;
+            padding: 0 16px 12px;
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .search-results.visible {
+            display: block;
+        }
+
+        .search-results-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 260px;
+            overflow-y: auto;
+        }
+
+        .search-result {
+            display: block;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+
+        .search-result:hover {
+            border-color: var(--accent-color);
+        }
+
+        .search-result-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 4px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .search-result-snippet {
+            color: var(--text-primary);
+            font-size: 13px;
+            line-height: 1.35;
         }
 
         @keyframes fadeIn {
@@ -597,6 +721,19 @@ export async function renderConversationPage(conversation, timezone, locale) {
 
             .chat-header {
                 padding: 12px;
+                flex-wrap: wrap;
+            }
+
+            .conversation-search {
+                order: 10;
+                flex-basis: 100%;
+                max-width: none;
+                min-width: 0;
+                margin-left: 0;
+            }
+
+            .search-status {
+                min-width: 72px;
             }
 
             .avatar {
@@ -666,43 +803,361 @@ export async function renderConversationPage(conversation, timezone, locale) {
                 window.location.href = url.toString();
             });
         }
+
+        function clearActiveSearchMessage() {
+            document.querySelectorAll('.message.search-active').forEach(message => {
+                message.classList.remove('search-active');
+            });
+        }
+
+        function focusSearchMessage(messageId) {
+            if (!messageId) return;
+            const target = document.getElementById(messageId);
+            if (!target) return;
+            clearActiveSearchMessage();
+            target.classList.add('search-active');
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        const searchForm = document.getElementById('conversationSearchForm');
+        const searchInput = document.getElementById('conversationSearchInput');
+        const initialQuery = pageThemeParams.get('q') || '';
+        if (initialQuery && searchInput) {
+            searchInput.value = initialQuery;
+        }
+
+        if (searchForm) {
+            searchForm.addEventListener('submit', event => {
+                if (!searchInput || !searchInput.value.trim()) {
+                    event.preventDefault();
+                    return;
+                }
+
+                const themeInput = searchForm.querySelector('input[name="theme"]');
+                if (themeInput) themeInput.value = currentTheme;
+            });
+        }
+
+        if (window.location.hash) {
+            window.setTimeout(() => focusSearchMessage(window.location.hash.slice(1)), 100);
+        }
+    </script>
+</body>
+</html>`;
+}
+
+export async function renderConversationSearchPage(conversation, timezone, locale, searchIndex = []) {
+  if (!conversation) return '';
+
+  const t = getTranslator(locale);
+  const title = conversation.isGroup
+    ? (conversation.groupName || t('groupChat'))
+    : (conversation.receiver?.name || t('unknown'));
+  const searchIndexJson = serializeJsonForScript(searchIndex);
+
+  return `<!DOCTYPE html>
+<html lang="${sanitizeHtml(locale || 'en')}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${sanitizeHtml(t('searchMessages'))} - ${sanitizeHtml(title)}</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
+    <script>
+        const initialThemeParams = new URLSearchParams(window.location.search);
+        const initialTheme = initialThemeParams.get('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', initialTheme);
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #f5f5f5;
+            --bg-secondary: white;
+            --bg-tertiary: #f9f9f9;
+            --text-primary: #000;
+            --text-secondary: #666;
+            --text-tertiary: #999;
+            --border-color: #e0e0e0;
+            --accent-color: #1976d2;
+            --shadow: rgba(0,0,0,0.1);
+        }
+        :root[data-theme="dark"] {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #2a2a2a;
+            --bg-tertiary: #333;
+            --text-primary: #e0e0e0;
+            --text-secondary: #b0b0b0;
+            --text-tertiary: #808080;
+            --border-color: #444;
+            --accent-color: #64b5f6;
+            --shadow: rgba(0,0,0,0.3);
+        }
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        .search-page {
+            max-width: 900px;
+            min-height: 100vh;
+            margin: 0 auto;
+            background-color: var(--bg-secondary);
+            box-shadow: 0 -2px 4px var(--shadow);
+        }
+        .search-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .back-button {
+            width: 36px;
+            height: 36px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--accent-color);
+            text-decoration: none;
+        }
+        .search-title {
+            flex: 1;
+            min-width: 220px;
+        }
+        .search-title h1 {
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+        .search-title p {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+        .conversation-search {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-basis: 100%;
+        }
+        .conversation-search-input {
+            flex: 1;
+            min-width: 0;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        .search-submit, .theme-toggle {
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background-color: var(--accent-color);
+            color: white;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .theme-toggle {
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 18px;
+        }
+        .search-summary {
+            padding: 16px;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+        .search-results-list {
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .search-result {
+            display: block;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            text-decoration: none;
+        }
+        .search-result:hover { border-color: var(--accent-color); }
+        .search-result-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 5px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+        .search-result-snippet {
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        @media (max-width: 600px) {
+            .search-header { padding: 12px; }
+            .search-result-meta { flex-direction: column; gap: 2px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="search-page">
+        <div class="search-header">
+            <a href="index.html" class="back-button" data-theme-link title="${sanitizeHtml(t('backToConversation'))}" aria-label="${sanitizeHtml(t('backToConversation'))}">‹</a>
+            <div class="search-title">
+                <h1>${sanitizeHtml(t('searchMessages'))}</h1>
+                <p>${sanitizeHtml(title)}</p>
+            </div>
+            <button class="theme-toggle" id="themeToggle" title="${sanitizeHtml(t('toggleDarkMode'))}">🌙</button>
+            <form class="conversation-search" id="conversationSearchForm" action="search.html" method="get" role="search">
+                <input id="conversationSearchInput" class="conversation-search-input" type="search" name="q" autocomplete="off" placeholder="${sanitizeHtml(t('searchMessages'))}" aria-label="${sanitizeHtml(t('searchMessages'))}" autofocus>
+                <input type="hidden" name="theme" value="">
+                <button class="search-submit" type="submit">${sanitizeHtml(t('search'))}</button>
+            </form>
+        </div>
+        <div class="search-summary" id="searchSummary"></div>
+        <div class="search-results-list" id="searchResultsList"></div>
+    </div>
+    <script type="application/json" id="conversation-search-index">${searchIndexJson}</script>
+    <script>
+        const pageThemeParams = new URLSearchParams(window.location.search);
+        const currentTheme = pageThemeParams.get('theme') || 'light';
+        const searchInput = document.getElementById('conversationSearchInput');
+        const searchForm = document.getElementById('conversationSearchForm');
+        const searchSummary = document.getElementById('searchSummary');
+        const searchResultsList = document.getElementById('searchResultsList');
+        const searchIndex = JSON.parse(document.getElementById('conversation-search-index').textContent || '[]');
+        const query = pageThemeParams.get('q') || '';
+
+        function updateThemeButton(theme) {
+            const button = document.getElementById('themeToggle');
+            if (button) button.textContent = theme === 'light' ? '🌙' : '☀️';
+        }
+
+        function normalizeSearchText(value) {
+            return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        }
+
+        function resultUrl(record, currentQuery) {
+            const url = new URL(record.file || 'index.html', window.location.href);
+            url.searchParams.set('theme', currentTheme);
+            if (currentQuery) url.searchParams.set('q', currentQuery);
+            url.hash = record.id;
+            return url.toString();
+        }
+
+        function renderResults(currentQuery) {
+            searchResultsList.textContent = '';
+            const terms = normalizeSearchText(currentQuery).trim().split(/\s+/).filter(Boolean);
+
+            if (terms.length === 0) {
+                searchSummary.textContent = '${sanitizeJsString(t('searchEnterQuery'))}';
+                return;
+            }
+
+            const matches = searchIndex.filter(record => terms.every(term => (record.text || '').includes(term)));
+            const visibleMatches = matches.slice(0, 100);
+            searchSummary.textContent = matches.length > 100
+                ? '${sanitizeJsString(t('searchShowingResults'))}'.replace('{shown}', visibleMatches.length).replace('{total}', matches.length)
+                : '${sanitizeJsString(t('searchResultsCount'))}'.replace('{count}', matches.length);
+
+            if (matches.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'search-result';
+                empty.textContent = '${sanitizeJsString(t('searchNoResults'))}';
+                searchResultsList.appendChild(empty);
+                return;
+            }
+
+            visibleMatches.forEach(record => {
+                const link = document.createElement('a');
+                link.className = 'search-result';
+                link.href = resultUrl(record, currentQuery);
+
+                const meta = document.createElement('div');
+                meta.className = 'search-result-meta';
+                const sender = document.createElement('span');
+                sender.textContent = record.sender || '${sanitizeJsString(t('unknown'))}';
+                const page = document.createElement('span');
+                page.textContent = '${sanitizeJsString(t('searchPageLabel'))} ' + record.page;
+                meta.append(sender, page);
+
+                const snippet = document.createElement('div');
+                snippet.className = 'search-result-snippet';
+                snippet.textContent = record.snippet || record.time || '';
+                link.append(meta, snippet);
+                searchResultsList.appendChild(link);
+            });
+        }
+
+        updateThemeButton(currentTheme);
+        document.querySelectorAll('[data-theme-link]').forEach(link => {
+            const url = new URL(link.href, window.location.href);
+            url.searchParams.set('theme', currentTheme);
+            link.href = url.toString();
+        });
+
+        const themeToggle = document.getElementById('themeToggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                const url = new URL(window.location.href);
+                url.searchParams.set('theme', currentTheme === 'light' ? 'dark' : 'light');
+                window.location.href = url.toString();
+            });
+        }
+
+        if (searchInput) searchInput.value = query;
+        if (searchForm) {
+            searchForm.addEventListener('submit', event => {
+                if (!searchInput || !searchInput.value.trim()) event.preventDefault();
+                const themeInput = searchForm.querySelector('input[name="theme"]');
+                if (themeInput) themeInput.value = currentTheme;
+            });
+        }
+        renderResults(query);
     </script>
 </body>
 </html>`;
 }
 
 export async function renderIndexPage(conversations, timezone, locale) {
-    if (!conversations || conversations.length === 0) {
-        return renderEmptyIndexPage(locale);
-    }
+  if (!conversations || conversations.length === 0) {
+    return renderEmptyIndexPage(locale);
+  }
 
-    const t = getTranslator(locale);
+  const t = getTranslator(locale);
 
-    // Sort conversations by name (group or receiver) alphabetically
-    const sorted = [...conversations].sort((a, b) => {
-        const aName = a.isGroup
-            ? (a.groupName || t('unknown')).toLowerCase()
-            : (a.receiver?.name || t('unknown')).toLowerCase();
-        const bName = b.isGroup
-            ? (b.groupName || t('unknown')).toLowerCase()
-            : (b.receiver?.name || t('unknown')).toLowerCase();
-        return aName.localeCompare(bName);
-    });
+  // Sort conversations by name (group or receiver) alphabetically
+  const sorted = [...conversations].sort((a, b) => {
+    const aName = a.isGroup
+      ? (a.groupName || t('unknown')).toLowerCase()
+      : (a.receiver?.name || t('unknown')).toLowerCase();
+    const bName = b.isGroup
+      ? (b.groupName || t('unknown')).toLowerCase()
+      : (b.receiver?.name || t('unknown')).toLowerCase();
+    return aName.localeCompare(bName);
+  });
 
-    const conversationListHtml = await Promise.all(
-        sorted.map(async (conv) => {
-            if (conv.isGroup) {
-                // For groups, don't get individual avatar
-                return renderConversationListItem(conv, null, null, timezone, locale);
-            } else {
-                const receiver = conv.receiver || { name: t('unknown'), email: 'unknown@example.com' };
-                const avatar = await getAvatar(receiver);
-                return renderConversationListItem(conv, avatar, receiver, timezone, locale);
-            }
-        })
-    );
+  const conversationListHtml = await Promise.all(
+    sorted.map(async (conv) => {
+      if (conv.isGroup) {
+        // For groups, don't get individual avatar
+        return renderConversationListItem(conv, null, null, timezone, locale);
+      } else {
+        const receiver = conv.receiver || { name: t('unknown'), email: 'unknown@example.com' };
+        const avatar = await getAvatar(receiver);
+        return renderConversationListItem(conv, avatar, receiver, timezone, locale);
+      }
+    })
+  );
 
-    return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="${sanitizeHtml(locale || 'en')}">
 <head>
     <meta charset="UTF-8">
@@ -1036,23 +1491,23 @@ export async function renderIndexPage(conversations, timezone, locale) {
 }
 
 function renderPaginationNav(conversationId, pageInfo, locale) {
-    const t = getTranslator(locale);
-    const { currentPage, totalPages, totalMessages, pageSize } = pageInfo;
+  const t = getTranslator(locale);
+  const { currentPage, totalPages, totalMessages, pageSize } = pageInfo;
 
-    // Don't show pagination for single page
-    if (totalPages <= 1) return '';
+  // Don't show pagination for single page
+  if (totalPages <= 1) return '';
 
-    const prevPage = currentPage > 1 ? currentPage - 1 : null;
-    const nextPage = currentPage < totalPages ? currentPage + 1 : null;
+  const prevPage = currentPage > 1 ? currentPage - 1 : null;
+  const nextPage = currentPage < totalPages ? currentPage + 1 : null;
 
-    const firstPageLink = 'index.html';
-    const lastPageLink = totalPages > 1 ? `page${totalPages}.html` : firstPageLink;
-    const prevPageLink = prevPage === 1 ? firstPageLink : `page${prevPage}.html`;
-    const nextPageLink = `page${nextPage}.html`;
+  const firstPageLink = 'index.html';
+  const lastPageLink = totalPages > 1 ? `page${totalPages}.html` : firstPageLink;
+  const prevPageLink = prevPage === 1 ? firstPageLink : `page${prevPage}.html`;
+  const nextPageLink = `page${nextPage}.html`;
 
-    // For pagination links, append theme parameter if present in current URL
-    // This is handled by the client-side script, so just use base links
-    return `
+  // For pagination links, append theme parameter if present in current URL
+  // This is handled by the client-side script, so just use base links
+  return `
     <div class="pagination-nav">
       <div class="pagination-info">
                 <span class="page-indicator">${sanitizeHtml(t('pageIndicator', { current: currentPage, total: totalPages }))}</span>
@@ -1071,12 +1526,12 @@ function renderPaginationNav(conversationId, pageInfo, locale) {
   `;
 }
 
-function renderHeader(receiver, avatar, t) {
-    const avatarContent = avatar.avatarUrl
-        ? `<div class="avatar"><img src="${avatar.avatarUrl}" alt="${sanitizeHtml(receiver.name)}" class="avatar-image"></div>`
-        : `<div class="avatar" style="background-color: ${avatar.color}">${avatar.initials}</div>`;
+function renderHeader(receiver, avatar, t, enableSearch = true) {
+  const avatarContent = avatar.avatarUrl
+    ? `<div class="avatar"><img src="${avatar.avatarUrl}" alt="${sanitizeHtml(receiver.name)}" class="avatar-image"></div>`
+    : `<div class="avatar" style="background-color: ${avatar.color}">${avatar.initials}</div>`;
 
-    return `<div class="chat-header">
+  return `<div class="chat-header">
     <a href="../index.html" class="back-button" title="${sanitizeHtml(t('backToConversations'))}" aria-label="${sanitizeHtml(t('backToConversations'))}">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
             <path d="M15 18l-6-6 6-6"></path>
@@ -1087,16 +1542,17 @@ function renderHeader(receiver, avatar, t) {
         <h2>${sanitizeHtml(receiver.name)}</h2>
         <p>${sanitizeHtml(receiver.email)}</p>
     </div>
+    ${enableSearch ? renderSearchControl(t) : ''}
     <button class="theme-toggle" id="themeToggle" title="${sanitizeHtml(t('toggleDarkMode'))}">🌙</button>
 </div>`;
 }
 
-function renderGroupHeader(groupName, members, t) {
-    const membersList = members && members.length > 0
-        ? members.map(m => `<div class="member-item"><span class="member-name">${sanitizeHtml(m.name)}</span><span class="member-email">${sanitizeHtml(m.email)}</span></div>`).join('')
-        : `<div class="member-item">${sanitizeHtml(t('noMembers'))}</div>`;
+function renderGroupHeader(groupName, members, t, enableSearch = true) {
+  const membersList = members && members.length > 0
+    ? members.map(m => `<div class="member-item"><span class="member-name">${sanitizeHtml(m.name)}</span><span class="member-email">${sanitizeHtml(m.email)}</span></div>`).join('')
+    : `<div class="member-item">${sanitizeHtml(t('noMembers'))}</div>`;
 
-    return `<div class="chat-header">
+  return `<div class="chat-header">
     <a href="../index.html" class="back-button" title="${sanitizeHtml(t('backToConversations'))}" aria-label="${sanitizeHtml(t('backToConversations'))}">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
             <path d="M15 18l-6-6 6-6"></path>
@@ -1107,141 +1563,152 @@ function renderGroupHeader(groupName, members, t) {
         <h2>${sanitizeHtml(groupName || t('groupChat'))}</h2>
         <div class="group-members">${membersList}</div>
     </div>
+    ${enableSearch ? renderSearchControl(t) : ''}
     <button class="theme-toggle" id="themeToggle" title="${sanitizeHtml(t('toggleDarkMode'))}">🌙</button>
 </div>`;
 }
 
+function renderSearchControl(t) {
+  return `<form class="conversation-search" id="conversationSearchForm" action="search.html" method="get" role="search">
+        <input id="conversationSearchInput" class="conversation-search-input" type="search" name="q" autocomplete="off" placeholder="${sanitizeHtml(t('searchMessages'))}" aria-label="${sanitizeHtml(t('searchMessages'))}">
+        <input type="hidden" name="theme" value="">
+        <button class="search-clear" type="submit" title="${sanitizeHtml(t('search'))}" aria-label="${sanitizeHtml(t('search'))}">🔎</button>
+        <span id="conversationSearchStatus" class="search-status" aria-live="polite"></span>
+    </form>`;
+}
+
 function renderDateSeparator(dateString, timezone, locale) {
-    const fullDate = formatDate(dateString, timezone, locale);
-    return `<div class="date-separator">
+  const fullDate = formatDate(dateString, timezone, locale);
+  return `<div class="date-separator">
     <div class="date-separator-text">${fullDate}</div>
 </div>`;
 }
 
-function renderMessagesWithDateSeparators(messages, ownerEmail, timezone, locale, ownerAvatar, isGroup = false, members = [], conversationId = null) {
-    if (messages.length === 0) return '';
+function renderMessagesWithDateSeparators(messages, ownerEmail, timezone, locale, ownerAvatar, isGroup = false, members = [], conversationId = null, startIndex = 0) {
+  if (messages.length === 0) return '';
 
-    let result = '';
-    let previousDate = null;
+  let result = '';
+  let previousDate = null;
 
-    messages.forEach((message, index) => {
-        // Use created_date if available, fallback to updated_date
-        const dateStr = message.created_date || message.updated_date;
+  messages.forEach((message, index) => {
+    // Use created_date if available, fallback to updated_date
+    const dateStr = message.created_date || message.updated_date;
 
-        // Skip if no date is available
-        if (!dateStr) {
-            result += renderMessageBubble(message, ownerEmail, timezone, locale, ownerAvatar, isGroup, conversationId);
-            return;
-        }
+    // Skip if no date is available
+    if (!dateStr) {
+      result += renderMessageBubble(message, ownerEmail, timezone, locale, ownerAvatar, isGroup, conversationId, startIndex + index);
+      return;
+    }
 
-        // Extract date from current message
-        const currentMessageDate = parseGoogleChatDate(dateStr);
+    // Extract date from current message
+    const currentMessageDate = parseGoogleChatDate(dateStr);
 
-        // Handle case where date parsing fails
-        if (!currentMessageDate) {
-            result += renderMessageBubble(message, ownerEmail, timezone, locale, ownerAvatar, isGroup, conversationId);
-            return;
-        }
+    // Handle case where date parsing fails
+    if (!currentMessageDate) {
+      result += renderMessageBubble(message, ownerEmail, timezone, locale, ownerAvatar, isGroup, conversationId, startIndex + index);
+      return;
+    }
 
-        const currentDateStr = currentMessageDate.toLocaleDateString();
+    const currentDateStr = currentMessageDate.toLocaleDateString();
 
-        // Check if we need to add a date separator
-        if (previousDate !== currentDateStr) {
-            result += renderDateSeparator(dateStr, timezone, locale);
-            previousDate = currentDateStr;
-        }
+    // Check if we need to add a date separator
+    if (previousDate !== currentDateStr) {
+      result += renderDateSeparator(dateStr, timezone, locale);
+      previousDate = currentDateStr;
+    }
 
-        // Add the message bubble
-        result += renderMessageBubble(message, ownerEmail, timezone, locale, ownerAvatar, isGroup, conversationId);
-    });
+    // Add the message bubble
+    result += renderMessageBubble(message, ownerEmail, timezone, locale, ownerAvatar, isGroup, conversationId, startIndex + index);
+  });
 
-    return result;
+  return result;
 }
 
 
 function renderAttachedFiles(attachedFiles, conversationId = null) {
-    if (!attachedFiles || attachedFiles.length === 0) return '';
+  if (!attachedFiles || attachedFiles.length === 0) return '';
 
-    return attachedFiles.map(file => {
-        const filename = file.export_name || file.original_name;
-        const displayName = file.original_name || file.export_name;
-        // Reference files from original data source: ../../Google Chat/Groups/conversationId/filename
-        const filePath = conversationId
-            ? `../../Google Chat/Groups/${conversationId}/${filename}`
-            : '../' + filename;
+  return attachedFiles.map(file => {
+    const filename = file.export_name || file.original_name;
+    const displayName = file.original_name || file.export_name;
+    // Reference files from original data source: ../../Google Chat/Groups/conversationId/filename
+    const filePath = conversationId
+      ? `../../Google Chat/Groups/${conversationId}/${filename}`
+      : '../' + filename;
 
-        if (isImageFile(filename)) {
-            return `<div class="attached-media"><img src="${sanitizeHtml(filePath)}" alt="${sanitizeHtml(displayName)}" class="attached-image"></div>`;
-        } else if (isVideoFile(filename)) {
-            return `<div class="attached-media"><video controls class="attached-video"><source src="${sanitizeHtml(filePath)}"></video></div>`;
-        } else if (isAudioFile(filename)) {
-            return `<div class="attached-media"><audio controls class="attached-audio"><source src="${sanitizeHtml(filePath)}"></audio></div>`;
-        } else {
-            const ext = getFileExtension(filename);
-            return `<div class="attached-file"><a href="${sanitizeHtml(filePath)}" download class="file-download">📎 ${sanitizeHtml(displayName)} <span class="file-ext">.${ext}</span></a></div>`;
-        }
-    }).join('');
+    if (isImageFile(filename)) {
+      return `<div class="attached-media"><img src="${sanitizeHtml(filePath)}" alt="${sanitizeHtml(displayName)}" class="attached-image"></div>`;
+    } else if (isVideoFile(filename)) {
+      return `<div class="attached-media"><video controls class="attached-video"><source src="${sanitizeHtml(filePath)}"></video></div>`;
+    } else if (isAudioFile(filename)) {
+      return `<div class="attached-media"><audio controls class="attached-audio"><source src="${sanitizeHtml(filePath)}"></audio></div>`;
+    } else {
+      const ext = getFileExtension(filename);
+      return `<div class="attached-file"><a href="${sanitizeHtml(filePath)}" download class="file-download">📎 ${sanitizeHtml(displayName)} <span class="file-ext">.${ext}</span></a></div>`;
+    }
+  }).join('');
 }
 
 function renderQuotedMessage(quotedMeta, locale) {
-    const t = getTranslator(locale);
-    if (!quotedMeta) return '';
+  const t = getTranslator(locale);
+  if (!quotedMeta) return '';
 
-    const creator = quotedMeta.creator || {};
-    const text = sanitizeHtml(quotedMeta.text || '').substring(0, 100);
+  const creator = quotedMeta.creator || {};
+  const text = sanitizeHtml(quotedMeta.text || '').substring(0, 100);
 
-    return `<div class="quoted-message">
+  return `<div class="quoted-message">
         <div class="quoted-sender">${sanitizeHtml(creator.name || t('unknown'))}</div>
         <div class="quoted-text">${text}${text.length === 100 ? '...' : ''}</div>
     </div>`;
 }
 
-function renderMessageBubble(message, ownerEmail, timezone, locale, ownerAvatar, isGroup = false, conversationId = null) {
-    const isOwner = message.creator.email === ownerEmail;
-    const time = formatTime(message.created_date, timezone, locale);
+function renderMessageBubble(message, ownerEmail, timezone, locale, ownerAvatar, isGroup = false, conversationId = null, messageIndex = 0) {
+  const isOwner = message.creator.email === ownerEmail;
+  const time = formatTime(message.created_date, timezone, locale);
+  const messageId = getMessageAnchorId(message, conversationId, messageIndex);
 
-    // Render quoted/replied message if exists
-    const quotedHtml = message.quoted_message_metadata ? renderQuotedMessage(message.quoted_message_metadata, locale) : '';
+  // Render quoted/replied message if exists
+  const quotedHtml = message.quoted_message_metadata ? renderQuotedMessage(message.quoted_message_metadata, locale) : '';
 
-    // Extract and render annotations (URLs with metadata)
-    const annotations = extractAnnotationsMetadata(message.annotations);
-    const annotationsHtml = annotations
-        .map(ann => renderAnnotation(ann, locale))
-        .join('');
+  // Extract and render annotations (URLs with metadata)
+  const annotations = extractAnnotationsMetadata(message.annotations);
+  const annotationsHtml = annotations
+    .map(ann => renderAnnotation(ann, locale))
+    .join('');
 
-    // Parse message text for inline links
-    // Extract URLs before sanitizing to preserve them properly
-    let messageText = message.text;
-    const urlRegex = /(https?:\/\/[^\s<>"']+)/g;
-    const urls = messageText.match(urlRegex) || [];
+  // Parse message text for inline links
+  // Extract URLs before sanitizing to preserve them properly
+  let messageText = message.text;
+  const urlRegex = /(https?:\/\/[^\s<>"']+)/g;
+  const urls = messageText.match(urlRegex) || [];
 
-    // Replace URLs with placeholders
-    let placeholderMap = {};
-    urls.forEach((url, index) => {
-        const placeholder = `__URL_PLACEHOLDER_${index}__`;
-        placeholderMap[placeholder] = url;
-        messageText = messageText.replace(url, placeholder);
-    });
+  // Replace URLs with placeholders
+  let placeholderMap = {};
+  urls.forEach((url, index) => {
+    const placeholder = `__URL_PLACEHOLDER_${index}__`;
+    placeholderMap[placeholder] = url;
+    messageText = messageText.replace(url, placeholder);
+  });
 
-    // Sanitize the text with placeholders
-    messageText = sanitizeHtml(messageText);
+  // Sanitize the text with placeholders
+  messageText = sanitizeHtml(messageText);
 
-    // Replace placeholders with proper links with escaped URLs
-    Object.entries(placeholderMap).forEach(([placeholder, url]) => {
-        const escapedUrl = sanitizeHtml(url);
-        const linkHtml = `<a href="${escapedUrl}" target="_blank" style="color: #1976d2; text-decoration: underline;">${escapedUrl}</a>`;
-        messageText = messageText.replace(placeholder, linkHtml);
-    });
+  // Replace placeholders with proper links with escaped URLs
+  Object.entries(placeholderMap).forEach(([placeholder, url]) => {
+    const escapedUrl = sanitizeHtml(url);
+    const linkHtml = `<a href="${escapedUrl}" target="_blank" style="color: #1976d2; text-decoration: underline;">${escapedUrl}</a>`;
+    messageText = messageText.replace(placeholder, linkHtml);
+  });
 
-    // Render attached files
-    const attachedFilesHtml = message.attached_files && message.attached_files.length > 0
-        ? renderAttachedFiles(message.attached_files, conversationId)
-        : '';
+  // Render attached files
+  const attachedFilesHtml = message.attached_files && message.attached_files.length > 0
+    ? renderAttachedFiles(message.attached_files, conversationId)
+    : '';
 
-    const messageClass = isOwner ? 'owner' : 'receiver';
-    const senderName = isGroup ? `<div class="message-sender">${sanitizeHtml(message.creator.name)}</div>` : '';
+  const messageClass = isOwner ? 'owner' : 'receiver';
+  const senderName = isGroup ? `<div class="message-sender">${sanitizeHtml(message.creator.name)}</div>` : '';
 
-    return `<div class="message ${messageClass}">
+  return `<div class="message ${messageClass}" id="${sanitizeHtml(messageId)}" data-message-id="${sanitizeHtml(messageId)}">
     <div class="message-content">
         ${senderName}
         ${quotedHtml}
@@ -1253,48 +1720,48 @@ function renderMessageBubble(message, ownerEmail, timezone, locale, ownerAvatar,
 </div>`;
 }
 function renderAnnotation(annotation, locale) {
-    const t = getTranslator(locale);
-    if (!annotation.url) return '';
+  const t = getTranslator(locale);
+  if (!annotation.url) return '';
 
-    const domain = extractDomain(annotation.url);
-    let html = `<a href="${annotation.url}" target="_blank" class="message-annotation">`;
+  const domain = extractDomain(annotation.url);
+  let html = `<a href="${annotation.url}" target="_blank" class="message-annotation">`;
 
-    if (annotation.title) {
-        html += `<div class="annotation-title">${sanitizeHtml(annotation.title)}</div>`;
-    }
+  if (annotation.title) {
+    html += `<div class="annotation-title">${sanitizeHtml(annotation.title)}</div>`;
+  }
 
-    if (annotation.imageUrl && isImageUrl(annotation.imageUrl)) {
-        html += `<img src="${annotation.imageUrl}" alt="${sanitizeHtml(t('previewAlt'))}" class="annotation-thumbnail">`;
-    }
+  if (annotation.imageUrl && isImageUrl(annotation.imageUrl)) {
+    html += `<img src="${annotation.imageUrl}" alt="${sanitizeHtml(t('previewAlt'))}" class="annotation-thumbnail">`;
+  }
 
-    if (annotation.snippet) {
-        html += `<div class="annotation-snippet">${sanitizeHtml(annotation.snippet)}</div>`;
-    }
+  if (annotation.snippet) {
+    html += `<div class="annotation-snippet">${sanitizeHtml(annotation.snippet)}</div>`;
+  }
 
-    html += `<div class="annotation-url">${sanitizeHtml(domain)}</div>`;
-    html += `</a>`;
+  html += `<div class="annotation-url">${sanitizeHtml(domain)}</div>`;
+  html += `</a>`;
 
-    return html;
+  return html;
 }
 
 async function renderConversationListItem(conversation, avatar, receiver, timezone, locale) {
-    const t = getTranslator(locale);
-    const fileName = `${conversation.id}/index.html`;
-    const lastMessageTime = conversation.lastMessage
-        ? formatTime(conversation.lastMessage.created_date, timezone, locale)
-        : '';
-    const messagePreview = conversation.lastMessage
-        ? sanitizeHtml(conversation.lastMessage.text).substring(0, 60)
-        : t('noMessages');
+  const t = getTranslator(locale);
+  const fileName = `${conversation.id}/index.html`;
+  const lastMessageTime = conversation.lastMessage
+    ? formatTime(conversation.lastMessage.created_date, timezone, locale)
+    : '';
+  const messagePreview = conversation.lastMessage
+    ? sanitizeHtml(conversation.lastMessage.text).substring(0, 60)
+    : t('noMessages');
 
-    if (conversation.isGroup) {
-        // Group conversation rendering
-        const memberCount = conversation.members ? conversation.members.length : 0;
-        const memberNames = conversation.members
-            ? conversation.members.slice(0, 3).map(m => m.name).join(', ') + (memberCount > 3 ? ` +${memberCount - 3}` : '')
-            : t('noMembers');
+  if (conversation.isGroup) {
+    // Group conversation rendering
+    const memberCount = conversation.members ? conversation.members.length : 0;
+    const memberNames = conversation.members
+      ? conversation.members.slice(0, 3).map(m => m.name).join(', ') + (memberCount > 3 ? ` +${memberCount - 3}` : '')
+      : t('noMembers');
 
-        return `<a href="${fileName}" class="conversation-item" data-theme-link>
+    return `<a href="${fileName}" class="conversation-item" data-theme-link>
     <div class="group-avatar-badge" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">👥</div>
     <div class="conversation-info">
         <div class="conversation-name">${sanitizeHtml(conversation.groupName || t('groupChat'))}</div>
@@ -1306,13 +1773,13 @@ async function renderConversationListItem(conversation, avatar, receiver, timezo
         <div>${lastMessageTime}</div>
     </div>
 </a>`;
-    } else {
-        // Direct message rendering
-        const avatarContent = avatar.avatarUrl
-            ? `<div class="conversation-avatar"><img src="${avatar.avatarUrl}" alt="${sanitizeHtml(receiver.name)}" class="conversation-avatar-image"></div>`
-            : `<div class="conversation-avatar" style="background-color: ${avatar.color}">${avatar.initials}</div>`;
+  } else {
+    // Direct message rendering
+    const avatarContent = avatar.avatarUrl
+      ? `<div class="conversation-avatar"><img src="${avatar.avatarUrl}" alt="${sanitizeHtml(receiver.name)}" class="conversation-avatar-image"></div>`
+      : `<div class="conversation-avatar" style="background-color: ${avatar.color}">${avatar.initials}</div>`;
 
-        return `<a href="${fileName}" class="conversation-item" data-theme-link>
+    return `<a href="${fileName}" class="conversation-item" data-theme-link>
     ${avatarContent}
     <div class="conversation-info">
         <div class="conversation-name">${sanitizeHtml(receiver.name)}</div>
@@ -1324,12 +1791,12 @@ async function renderConversationListItem(conversation, avatar, receiver, timezo
         <div>${lastMessageTime}</div>
     </div>
 </a>`;
-    }
+  }
 }
 
 function renderEmptyIndexPage(locale) {
-    const t = getTranslator(locale);
-    return `<!DOCTYPE html>
+  const t = getTranslator(locale);
+  return `<!DOCTYPE html>
 <html lang="${sanitizeHtml(locale || 'en')}">
 <head>
     <meta charset="UTF-8">

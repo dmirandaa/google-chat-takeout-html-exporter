@@ -1,6 +1,6 @@
 {
   "name": "google-chat-takeout-html-exporter",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Convert Google Chat JSON exports to Material Design 3 HTML chat interface",
   "main": "src/index.js",
   "type": "module",

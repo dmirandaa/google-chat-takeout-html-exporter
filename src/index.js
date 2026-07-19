@@ -4,6 +4,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import * as parser from './parser.js';
 import * as renderer from './renderer.js';
+import { buildConversationSearchIndex } from './searchIndex.js';
 
 dotenv.config();
 
@@ -17,6 +18,7 @@ const OUTPUT_DIR = process.env.OUTPUT_DIR || './output';
 const DATA_SOURCE_PATH = process.env.DATA_SOURCE_PATH || './Groups';
 const USER_DATA_PATH = process.env.USER_DATA_PATH || './Users';
 const MESSAGES_PER_PAGE = parseInt(process.env.MESSAGES_PER_PAGE) || 1000;
+const ENABLE_SEARCH = process.env.ENABLE_SEARCH !== 'false';
 
 
 
@@ -31,7 +33,8 @@ async function main() {
   console.log(`  Timezone: ${TIMEZONE}`);
   console.log(`  Locale: ${LOCALE}`);
   console.log(`  Output Directory: ${OUTPUT_DIR}`);
-  console.log(`  Data Source: ${DATA_SOURCE_PATH}\n`);
+  console.log(`  Data Source: ${DATA_SOURCE_PATH}`);
+  console.log(`  Full-text Search: ${ENABLE_SEARCH ? 'enabled' : 'disabled'}\n`);
 
   // Create output directory
   if (!fs.existsSync(OUTPUT_DIR)) {
@@ -62,9 +65,14 @@ async function main() {
   console.log('🎨 Generating HTML files...'); console.log('   (Attachment files will be referenced from source data)\n'); let successCount = 0;
   let errorCount = 0;
   let paginatedCount = 0;
+  let searchPageCount = 0;
 
   for (const conversation of conversations) {
     try {
+      const searchIndex = ENABLE_SEARCH
+        ? buildConversationSearchIndex(conversation, MESSAGES_PER_PAGE)
+        : [];
+
       // Check if pagination is needed
       if (MESSAGES_PER_PAGE > 0 && conversation.messages.length > MESSAGES_PER_PAGE) {
         // Generate paginated files
@@ -83,14 +91,16 @@ async function main() {
               currentPage: page,
               totalPages,
               totalMessages: conversation.messages.length,
-              pageSize: MESSAGES_PER_PAGE
+              pageSize: MESSAGES_PER_PAGE,
+              startIndex: startIdx
             }
           };
 
           const htmlContent = await renderer.renderConversationPage(
             pageConversation,
             TIMEZONE,
-            LOCALE
+            LOCALE,
+            ENABLE_SEARCH
           );
 
           const conversationDir = path.join(OUTPUT_DIR, conversation.id);
@@ -111,7 +121,8 @@ async function main() {
         const htmlContent = await renderer.renderConversationPage(
           conversation,
           TIMEZONE,
-          LOCALE
+          LOCALE,
+          ENABLE_SEARCH
         );
 
         const conversationDir = path.join(OUTPUT_DIR, conversation.id);
@@ -123,13 +134,33 @@ async function main() {
         fs.writeFileSync(fileName, htmlContent, 'utf8');
         successCount++;
       }
+
+      const conversationDir = path.join(OUTPUT_DIR, conversation.id);
+      if (!fs.existsSync(conversationDir)) {
+        fs.mkdirSync(conversationDir, { recursive: true });
+      }
+
+      const searchPath = path.join(conversationDir, 'search.html');
+      if (ENABLE_SEARCH) {
+        const searchHtml = await renderer.renderConversationSearchPage(
+          conversation,
+          TIMEZONE,
+          LOCALE,
+          searchIndex
+        );
+        fs.writeFileSync(searchPath, searchHtml, 'utf8');
+        searchPageCount++;
+      } else if (fs.existsSync(searchPath)) {
+        fs.unlinkSync(searchPath);
+      }
     } catch (error) {
       console.warn(`⚠️  Error rendering conversation ${conversation.id}:`, error.message);
       errorCount++;
     }
   }
 
-  console.log(`✅ Rendered ${successCount} HTML files (${paginatedCount} paginated), ${errorCount} errors\n`);
+  const searchSummary = ENABLE_SEARCH ? ` and ${searchPageCount} search pages` : '';
+  console.log(`✅ Rendered ${successCount} conversation HTML files${searchSummary} (${paginatedCount} paginated), ${errorCount} errors\n`);
 
   // Render index page
   console.log('📑 Generating index page...');
@@ -153,7 +184,8 @@ async function main() {
   console.log('║   ✅ Export Complete!                  ║');
   console.log('╚════════════════════════════════════════╝\n');
   console.log(`📂 Output directory: ${OUTPUT_DIR}`);
-  console.log(`📄 Files generated: ${successCount + 1} (conversations + index)`);
+  const generatedFileLabel = ENABLE_SEARCH ? 'conversations + search pages + index' : 'conversations + index';
+  console.log(`📄 Files generated: ${successCount + searchPageCount + 1} (${generatedFileLabel})`);
   console.log(`⚠️  Errors: ${errorCount}`);
   console.log('\n💡 Next step: Open index.html in your browser to view conversations');
 }

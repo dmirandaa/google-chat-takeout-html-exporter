@@ -131,6 +131,50 @@
             font-size: 18px;
         }
 
+        .conversation-search {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            min-width: 220px;
+        }
+
+        .conversation-search-input {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 13px;
+        }
+
+        .search-button {
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background-color: var(--accent-color);
+            color: white;
+            cursor: pointer;
+        }
+
+        .search-result-demo {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            margin: 12px 16px;
+            font-size: 13px;
+        }
+
+        .search-result-demo-meta {
+            display: flex;
+            justify-content: space-between;
+            color: var(--text-secondary);
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+
         /* Demo Info Box */
         .demo-info {
             background-color: #e3f2fd;
@@ -350,6 +394,11 @@
 
             .chat-header {
                 padding: 12px;
+                flex-wrap: wrap;
+            }
+
+            .conversation-search {
+                flex-basis: 100%;
             }
 
             .pagination-buttons {
@@ -388,7 +437,20 @@
                     <h2>Jane Doe</h2>
                     <p>jane@example.com</p>
                 </div>
+                <form class="conversation-search" action="#" method="get">
+                    <input class="conversation-search-input" type="search" value="designs" aria-label="Search messages">
+                    <button class="search-button" type="submit">🔎</button>
+                </form>
                 <button class="theme-toggle" id="themeToggle" title="Toggle dark mode">🌙</button>
+            </div>
+
+            <div class="search-result-demo">
+                <div class="search-result-demo-meta">
+                    <span>Jane Doe</span>
+                    <span>Page 1</span>
+                </div>
+                <div>Search opens a local <code>search.html</code> page for this conversation and links results back to
+                    the exact message.</div>
             </div>
 
             <!-- Messages -->
@@ -513,6 +575,12 @@
                 <code>page2.html</code>, etc.
             </div>
 
+            <div class="feature-callout">
+                <strong>🔎 Local Conversation Search</strong>
+                Each conversation includes a self-contained <code>search.html</code> page with an embedded index. It
+                searches messages, senders, attachment filenames, and URL preview metadata without a server.
+            </div>
+
             <!-- Features Summary -->
             <div
                 style="background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 16px; margin-top: 24px;">
@@ -520,6 +588,8 @@
                 <ul style="list-style: none; font-size: 13px; line-height: 1.8;">
                     <li>✅ <strong>Folder-per-conversation structure</strong> - Each conversation isolated in its own
                         directory</li>
+                    <li>✅ <strong>Local full-text search</strong> - Per-conversation search works from local HTML files
+                    </li>
                     <li>✅ <strong>Source-referenced attachments</strong> - No file copying; references point to original
                         Google Chat/Groups data</li>
                     <li>✅ <strong>Dark mode</strong> - Theme persists across page navigation via URL parameters</li>
@@ -542,9 +612,11 @@ output/
 ├── index.html                    ← Master page listing all conversations
 ├── DM 5tR6XgAAAAE/
 │   ├── index.html               ← Conversation page 1
-│   └── page2.html               ← Page 2 (if paginated)
+│   ├── page2.html               ← Page 2 (if paginated)
+│   └── search.html              ← Local search for this conversation
 ├── Space AAAAFl-t5LU/
-│   └── index.html               ← Group chat page
+│   ├── index.html               ← Group chat page
+│   └── search.html              ← Local search for this space
 └── [48 more conversation folders...]
 
 ✨ All files reference attachments from:

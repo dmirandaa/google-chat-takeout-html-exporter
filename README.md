@@ -12,6 +12,7 @@ Convert Google Chat JSON exports into beautiful, interactive Material Design 3 H
 📱 **Responsive Design** - Works on desktop, tablet, and mobile devices  
 🌙 **Dark Mode** - Toggle between light and dark themes with persistent preference  
 📊 **Conversation Index** - Master index page listing all conversations with preview  
+🔎 **Local Full-Text Search** - Search messages, senders, attachments, and URL metadata within each conversation  
 🖼️ **Inline Media Support** - Display images, videos, and download links  
 ⚡ **Fast Generation** - Process thousands of messages in seconds  
 
@@ -59,6 +60,12 @@ Want to see what the exporter output looks like? Open [DEMO](http://www.danielmi
 
    ```bash
    npm start
+   ```
+
+   To skip local full-text search pages for a smaller/faster export:
+
+   ```bash
+   ENABLE_SEARCH=false npm start
    ```
 
 5. **View results**
@@ -116,6 +123,7 @@ The exporter uses a locale-based translation resource for generated HTML UI text
 - Index page labels (title, subtitle, stats)
 - Conversation page labels (footer, empty states)
 - Pagination labels (page indicator, Previous/Next, First/Last)
+- Search labels (search box, result counts, empty states)
 - Generic fallback text (Unknown, Group Chat, No members)
 - Theme button titles
 
@@ -151,18 +159,19 @@ See [BUG.md](BUG.md) for a documented Google Takeout metadata bug that can affec
 ## Project Structure
 
 ```text
-google-chat-takeout-viewer/
+google-chat-takeout-exporter/
 ├── src/
 │   ├── avatarManager.js      # User avatar handling
 │   ├── dateFormatter.js      # Timezone/locale formatting
 │   ├── index.js              # Main entry point
 │   ├── parser.js             # JSON parsing logic
 │   ├── renderer.js           # HTML generation
+│   ├── searchIndex.js        # Local conversation search index generation
 │   └── utils.js              # Helper utilities
 ├── output/                   # Generated HTML files (created after running)
 │   ├── index.html            # Master conversation list
-│   ├── DM */                 # Individual conversation pages
-│   └── Space */              # Group space pages
+│   ├── DM */                 # DM conversation pages + search.html
+│   └── Space */              # Group space pages + search.html
 ├── package.json              # Dependencies
 ├── .env                      # Configuration (keep secret!)
 ├── .gitignore                # Git ignore rules
@@ -184,11 +193,12 @@ Master page listing all conversations with:
 - Message count per conversation
 - Links to individual conversation pages
 
-### Individual Conversation Pages (DM *.html)
+### Individual Conversation Folders
 
 Each conversation includes:
 
 - **Header** - Receiver profile (avatar, name, email) with back link
+- **Search** - Local full-text search page for the current conversation
 - **Messages** - Chronological message bubbles
   - **Owner messages** - Right-aligned, light blue background
   - **Receiver messages** - Left-aligned, light gray background
@@ -196,6 +206,21 @@ Each conversation includes:
 - **URL Previews** - Rich metadata cards with title, snippet, thumbnail
 - **Responsive Design** - Optimized for mobile, tablet, desktop
 - **Footer** - Export info and timezone/locale details
+
+### Conversation Search
+
+Each conversation folder includes a local `search.html` page. The search page embeds a compact index for that conversation directly in the HTML, so it works when opening files locally in a browser without a server or external search service.
+
+Search is enabled by default. Set `ENABLE_SEARCH=false` before running `npm start` to skip search UI and `search.html` generation.
+
+Search covers:
+
+- Message text
+- Sender names and emails
+- Attachment `original_name` and `export_name`
+- URL preview titles, snippets, and URLs
+
+Search results link back to the correct conversation page and message anchor, including paginated pages such as `page2.html`. The index uses the metadata exported by Google Takeout as-is, so it cannot recover incorrect attachment mappings described in [BUG.md](BUG.md).
 
 ## Usage Examples
 
@@ -262,33 +287,33 @@ npm run dev   # Watch mode - regenerate on changes
 
 ### Modules
 
-**parser.js**
+#### parser.js
 
 - Reads Google Chat JSON exports
 - Parses user info, conversations, messages
 - Handles missing/malformed data gracefully
 
-**renderer.js**
+#### renderer.js
 
 - Generates Material Design 3 HTML
 - Renders individual conversation pages
 - Renders master index page
 - Handles message formatting and annotations
 
-**dateFormatter.js**
+#### dateFormatter.js
 
 - Parses Google Chat timestamp format
 - Converts to configured timezone
 - Formats dates per locale
 
-**avatarManager.js**
+#### avatarManager.js
 
 - Generates Gravatar URLs using MD5 email hashing
 - Extracts user initials from names for fallback display
 - Creates consistent color palette per email address
 - Returns complete avatar objects with all display information
 
-**utils.js**
+#### utils.js
 
 - URL extraction and validation
 - HTML sanitization (XSS prevention)
@@ -352,6 +377,23 @@ Fallback: Display colored initials (always available)
 - ✅ No authentication needed
 - ✅ Works for any email worldwide
 
+## Changelog
+
+### v1.1.0
+
+- Added optional local full-text search for each conversation with a self-contained `search.html` page.
+- Added `ENABLE_SEARCH=false` support to skip search UI and search page generation for smaller/faster exports.
+- Search indexes message text, sender names/emails, attachment filenames, and URL preview metadata.
+- Search results link back to the correct message anchor across paginated conversation pages.
+- Updated the demo and documentation to explain the local search workflow.
+
+### v1.0.0
+
+- Added folder-per-conversation output structure with per-conversation `index.html`, paginated `pageN.html`.
+- Switched attachments to source-referenced relative paths instead of copying media into `output/`.
+- Added Material Design 3 conversation UI with dark mode, pagination, i18n labels, Gravatar avatars, inline media, and URL previews.
+- Added demo page and documentation for configuration, avatars, known Takeout attachment metadata issues, and generated output structure.
+
 ## Performance
 
 - **Parsing:** 49 conversations with 613,385 total messages
@@ -399,7 +441,7 @@ For issues or questions:
 
 Potential improvements:
 
-- [ ] Search/filter conversations
+- [✅] Search/filter conversations
 - [ ] Full-text message search
 - [ ] Export to PDF
 - [ ] Conversation statistics (word count, message frequency)
@@ -413,4 +455,4 @@ Potential improvements:
 
 ---
 
-**Made with ❤️ using Node.js and Material Design 3**
+### Made with ❤️ using Node.js and Material Design 3

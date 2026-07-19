@@ -70,6 +70,16 @@ All configuration is managed through the `.env` file. Below are all available va
 - `./output` - Output in current directory
 - `/home/user/Google-Chat-Takeout-Viewer/output` - Custom absolute path
 
+#### `ENABLE_SEARCH`
+
+**Type:** `boolean` (`true` or `false`)
+**Default:** `true`
+**Description:** Enables local full-text search for each conversation. When enabled, the exporter creates one self-contained `search.html` page in each conversation folder. Disable it to reduce generated file count, output size, and generation time.
+**Examples:**
+
+- `ENABLE_SEARCH=true` - Generate conversation search pages
+- `ENABLE_SEARCH=false` - Skip search UI and search pages
+
 ---
 
 ## Avatar System
